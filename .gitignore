@@ -18,3 +18,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated files
+docs/uk_merged.xml.gz
+docs/index.html
