@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<tv generator-info-name="fallback-uk-epg">
+  <!-- Basic UK channels for fallback when external sources fail -->
+  <channel id="bbc.one.uk">
+    <display-name>BBC One</display-name>
+  </channel>
+  <channel id="bbc.two.uk">
+    <display-name>BBC Two</display-name>
+  </channel>
+  <channel id="itv1.uk">
+    <display-name>ITV1</display-name>
+  </channel>
+  <channel id="channel4.uk">
+    <display-name>Channel 4</display-name>
+  </channel>
+  <channel id="channel5.uk">
+    <display-name>Channel 5</display-name>
+  </channel>
+  <!-- Minimal programme data for today -->
+  <programme start="20241213060000 +0000" stop="20241213120000 +0000" channel="bbc.one.uk">
+    <title>BBC Breakfast</title>
+    <desc>Morning news and current affairs programme</desc>
+  </programme>
+  <programme start="20241213120000 +0000" stop="20241213130000 +0000" channel="bbc.one.uk">
+    <title>BBC News</title>
+    <desc>Latest news updates</desc>
+  </programme>
+  <programme start="20241213060000 +0000" stop="20241213120000 +0000" channel="itv1.uk">
+    <title>Good Morning Britain</title>
+    <desc>Morning television programme</desc>
+  </programme>
+</tv>

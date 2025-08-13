@@ -8,11 +8,20 @@ import requests
 EPG_PW_URL = "https://epg.pw/xmltv/epg_GB.xml.gz"
 IPTVORG_URL = "https://iptv-org.github.io/epg/guides/gb.xml"
 
+# Alternative EPG sources for better reliability
+ALTERNATIVE_SOURCES = [
+    "https://raw.githubusercontent.com/iptv-org/epg/master/guides/uk.xml",
+    "https://xmltv.org/xml/epg.xml.gz",
+    "https://raw.githubusercontent.com/matthuisman/iptv-org-epg/master/uk.xml",
+    "https://iptv-org.github.io/epg/guides/uk.xml"
+]
+
 M3U_URL = os.environ.get("M3U_URL", "").strip()
 
 OUT_DIR = "docs"
 OUT_XML_GZ = os.path.join(OUT_DIR, "uk_merged.xml.gz")
 OUT_INDEX = os.path.join(OUT_DIR, "index.html")
+FALLBACK_EPG = "fallback_epg.xml"
 
 # Alias map for common UK id mismatches (case-insensitive keys, lowercase output)
 ALIAS_MAP = {
@@ -268,10 +277,52 @@ def main():
         except Exception as e:
             print(f"[warn] could not fetch/parse M3U: {e}", file=sys.stderr)
 
-    # Fetch EPG sources
-    epg_pw_root = load_xml_root(ungzip_if_needed(fetch(EPG_PW_URL)))
-    iptv_org_root = load_xml_root(ungzip_if_needed(fetch(IPTVORG_URL)))
-    epg_roots = [epg_pw_root, iptv_org_root]
+    # Fetch EPG sources - handle failures gracefully
+    epg_roots = []
+    
+    # Primary sources
+    primary_sources = [
+        ("epg.pw", EPG_PW_URL),
+        ("iptv-org", IPTVORG_URL)
+    ]
+    
+    # Try primary sources first
+    for source_name, url in primary_sources:
+        try:
+            epg_root = load_xml_root(ungzip_if_needed(fetch(url)))
+            epg_roots.append(epg_root)
+            print(f"[info] successfully fetched EPG from {source_name}", file=sys.stderr)
+        except Exception as e:
+            print(f"[warn] could not fetch EPG from {source_name}: {e}", file=sys.stderr)
+    
+    # If no primary sources worked, try alternatives
+    if not epg_roots:
+        print("[info] primary sources failed, trying alternatives...", file=sys.stderr)
+        for i, alt_url in enumerate(ALTERNATIVE_SOURCES):
+            try:
+                epg_root = load_xml_root(ungzip_if_needed(fetch(alt_url)))
+                epg_roots.append(epg_root)
+                print(f"[info] successfully fetched EPG from alternative source {i+1}", file=sys.stderr)
+                break  # Use first working alternative
+            except Exception as e:
+                print(f"[warn] alternative source {i+1} failed: {e}", file=sys.stderr)
+    
+    # Check if we have any EPG sources
+    if not epg_roots:
+        print("[warn] no external EPG sources available, using fallback data", file=sys.stderr)
+        # Try to use fallback EPG data
+        if os.path.exists(FALLBACK_EPG):
+            try:
+                with open(FALLBACK_EPG, 'rb') as f:
+                    fallback_root = load_xml_root(f.read())
+                    epg_roots.append(fallback_root)
+                    print(f"[info] using fallback EPG data from {FALLBACK_EPG}", file=sys.stderr)
+            except Exception as e:
+                print(f"[error] could not load fallback EPG: {e}", file=sys.stderr)
+        
+        if not epg_roots:
+            print("[error] no EPG sources available (including fallback), cannot generate EPG", file=sys.stderr)
+            sys.exit(1)
 
     # Resolve which EPG ids to include (id + name fallback)
     keep_ids = resolve_keep_ids(m3u_entries, epg_roots, fuzzy_threshold=0.86)
@@ -286,6 +337,11 @@ def main():
     write_gzip_xml(merged, OUT_XML_GZ)
 
     ts = datetime.now(timezone.utc).isoformat()
+    epg_source_info = f"Generated from {len(epg_roots)} EPG source(s)"
+    if len(epg_roots) == 1 and os.path.exists(FALLBACK_EPG):
+        # Check if we're using only fallback data
+        epg_source_info = "Generated from fallback data (external sources unavailable)"
+    
     with open(OUT_INDEX, "w", encoding="utf-8") as f:
         f.write(f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>UK Merged EPG</title></head>
@@ -293,6 +349,7 @@ def main():
 <h1>UK Merged EPG</h1>
 <p>Last build (UTC): {ts}</p>
 <p>XMLTV: <a href="uk_merged.xml.gz">uk_merged.xml.gz</a></p>
+<p>{epg_source_info}</p>
 </body></html>""")
 
 if __name__ == "__main__":
