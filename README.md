@@ -10,8 +10,10 @@ Builds a combined UK EPG (Electronic Program Guide) from multiple sources with i
   3. **Fuzzy name matching** using difflib.SequenceMatcher (default threshold: 0.86)
 
 - **Multiple EPG Sources**: Combines data from:
-  - [epg.pw](https://epg.pw) UK EPG data
-  - [iptv-org](https://iptv-org.github.io) UK guide data
+  - [epg.pw](https://epg.pw) UK EPG data (primary source)
+  - Backup sources automatically used if available
+
+- **Resilient Fetching**: Automatic retries and graceful degradation when sources are unavailable
 
 - **Smart Deduplication**: Removes duplicate programs by (start time, stop time, title) and prefers longer descriptions
 
@@ -39,6 +41,16 @@ The system handles common UK channel variations:
 
 - Python 3.11+
 - `requests` library (see requirements.txt)
+- **Internet access required**: This script fetches live EPG data from remote sources
+
+### Internet Access Requirements
+
+This script **requires active internet connectivity** to function as it:
+- Fetches EPG data from `epg.pw` (primary source)
+- Downloads M3U playlist from configured URL (if provided)
+- Cannot operate in sandboxed environments without internet access
+
+The script will automatically check connectivity and exit with an error if no internet access is detected.
 
 ## Local Development
 

@@ -6,7 +6,10 @@ import difflib
 import requests
 
 EPG_PW_URL = "https://epg.pw/xmltv/epg_GB.xml.gz"
-IPTVORG_URL = "https://iptv-org.github.io/epg/guides/gb.xml"
+# Alternative sources - add working ones as they become available
+BACKUP_EPG_URLS = [
+    # "https://iptv-org.github.io/epg/guides/gb.xml",  # Currently returns 404
+]
 
 M3U_URL = os.environ.get("M3U_URL", "").strip()
 
@@ -66,6 +69,34 @@ def normalize_name(name: str) -> str:
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "uk-epg-merge/1.1 (+github actions)"})
 
+def check_internet_connectivity():
+    """Check basic internet connectivity"""
+    test_urls = [
+        "https://httpbin.org/ip",
+        "https://www.google.com",
+        "https://github.com"
+    ]
+    
+    for url in test_urls:
+        try:
+            r = SESSION.head(url, timeout=5)
+            if r.status_code < 400:
+                return True
+        except:
+            continue
+    return False
+
+def fetch_epg_source(url, source_name=""):
+    """Fetch EPG source with error handling"""
+    try:
+        print(f"[info] Fetching {source_name or url}...", file=sys.stderr)
+        content = fetch(url)
+        root = load_xml_root(ungzip_if_needed(content))
+        print(f"[info] ✓ Successfully loaded {source_name or url}", file=sys.stderr)
+        return root
+    except Exception as e:
+        print(f"[warn] ✗ Failed to load {source_name or url}: {e}", file=sys.stderr)
+        return None
 def fetch(url, retries=3, timeout=20):
     last_err = None
     for attempt in range(1, retries+1):
@@ -258,6 +289,12 @@ def write_gzip_xml(root: ET.Element, path: str):
         f.write(data)
 
 def main():
+    # Check internet connectivity first
+    if not check_internet_connectivity():
+        print("[error] No internet connectivity detected. This script requires internet access to fetch EPG data.", file=sys.stderr)
+        print("[error] Please ensure you have internet access and try again.", file=sys.stderr)
+        sys.exit(1)
+    
     # Fetch playlist
     m3u_entries = []
     if M3U_URL:
@@ -268,10 +305,25 @@ def main():
         except Exception as e:
             print(f"[warn] could not fetch/parse M3U: {e}", file=sys.stderr)
 
-    # Fetch EPG sources
-    epg_pw_root = load_xml_root(ungzip_if_needed(fetch(EPG_PW_URL)))
-    iptv_org_root = load_xml_root(ungzip_if_needed(fetch(IPTVORG_URL)))
-    epg_roots = [epg_pw_root, iptv_org_root]
+    # Fetch EPG sources with resilient error handling
+    epg_roots = []
+    
+    # Primary source
+    epg_pw_root = fetch_epg_source(EPG_PW_URL, "EPG.PW")
+    if epg_pw_root is not None:
+        epg_roots.append(epg_pw_root)
+    
+    # Backup sources
+    for backup_url in BACKUP_EPG_URLS:
+        backup_root = fetch_epg_source(backup_url, f"Backup EPG ({backup_url})")
+        if backup_root is not None:
+            epg_roots.append(backup_root)
+    
+    if not epg_roots:
+        print("[error] Failed to fetch any EPG sources. Check internet connectivity.", file=sys.stderr)
+        sys.exit(1)
+    
+    print(f"[info] Successfully loaded {len(epg_roots)} EPG source(s)", file=sys.stderr)
 
     # Resolve which EPG ids to include (id + name fallback)
     keep_ids = resolve_keep_ids(m3u_entries, epg_roots, fuzzy_threshold=0.86)
